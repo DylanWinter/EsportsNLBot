@@ -1,10 +1,12 @@
 class Veto:
-    def __init__(self, maps: list[str], team1: list[int], team2: list[int], num_to_select = 1):
+    def __init__(self, channel:int, maps: list[str], team1: list[int], team2: list[int], num_to_select = 1):
         self.maps_remaining = maps.copy()
         self.banned_maps = []
         self.picked_maps = []
         self.num_to_select = num_to_select
         self.completed = False
+
+        self.channel = channel
 
         self.team1 = [int(p) for p in team1]
         self.team2 = [int(p) for p in team2]

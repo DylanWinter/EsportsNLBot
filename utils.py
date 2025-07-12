@@ -1,4 +1,5 @@
 import re
+from veto import Veto
 
 def display_list(data: list[str]):
     """ Correctly formats a list of maps """
@@ -14,3 +15,9 @@ def parse_users(user_str: str) -> list[int]:
 
     # Find all matches and convert to integers
     return [int(match.group("id")) for match in re.finditer(pattern, user_str)]
+
+def get_veto_for_channel(vetoes: list[Veto], channel_id: int):
+    for veto in vetoes:
+        if veto.channel == channel_id:
+            return veto
+    return None

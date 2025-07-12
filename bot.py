@@ -7,7 +7,7 @@ import json
 import os
 
 from veto import Veto
-from utils import display_list, parse_users
+from utils import display_list, parse_users, get_veto_for_channel
 
 load_dotenv()
 discord_token = os.getenv("DISCORD_TOKEN")
@@ -20,7 +20,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='?', description=description, intents=intents)
 # Bot state
-bot.active_veto = None
+bot.active_vetoes = []
 
 @bot.event
 async def on_ready():
@@ -33,22 +33,23 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     # Handles map veto (messages starting with -)
-    if message.content.startswith("-") and bot.active_veto is not None:
+    veto = get_veto_for_channel(bot.active_vetoes, message.channel.id)
+    if message.content.startswith("-") and veto is not None:
         try:
             map_to_ban = message.content[1:]
-            if bot.active_veto.can_user_ban(int(message.author.id)):
-                bot.active_veto.ban(map_to_ban, int(message.author.id))
+            if veto.can_user_ban(int(message.author.id)):
+                veto.ban(map_to_ban, int(message.author.id))
 
-                if bot.active_veto.completed:
-                    maps_text = display_list(bot.active_veto.maps_remaining)
-                    bot.active_veto = None
+                if veto.completed:
+                    maps_text = display_list(veto.maps_remaining)
+                    bot.active_vetoes.remove(veto)
                     await message.channel.send("Banned map " + map_to_ban.capitalize() +
                                                "\nMap(s) for the match: " + maps_text)
                 else:
-                    mentions = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.active_team)
+                    mentions = " ".join(f"<@{user_id}>" for user_id in veto.active_team)
                     await message.channel.send(f"Banned map {map_to_ban.capitalize()}"+
                                                f"\nTeam banning: {mentions}" +
-                                               f"\nMaps remaining: {display_list(bot.active_veto.maps_remaining)}")
+                                               f"\nMaps remaining: {display_list(veto.maps_remaining)}")
         except ValueError as e:
             await message.channel.send(str(e))
 
@@ -99,12 +100,14 @@ async def start_veto(interaction: discord.Interaction, team1: str, team2: str, n
     with open("config.json", "r") as f:
         data = json.load(f)
     maps = data["maps"]
-    if bot.active_veto is not None:
+    veto = get_veto_for_channel(bot.active_vetoes, interaction.channel.id)
+    if veto is not None:
         await interaction.response.send_message("There is already an active veto.", ephemeral=True)
-    bot.active_veto = Veto(maps, parse_users(team1), parse_users(team2), num_maps)
-    mentions_active = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.active_team)
-    mentions_t1 = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.team1)
-    mentions_t2 = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.team2)
+    veto = Veto(int(interaction.channel.id), maps, parse_users(team1), parse_users(team2), num_maps)
+    bot.active_vetoes.append(veto)
+    mentions_active = " ".join(f"<@{user_id}>" for user_id in veto.active_team)
+    mentions_t1 = " ".join(f"<@{user_id}>" for user_id in veto.team1)
+    mentions_t2 = " ".join(f"<@{user_id}>" for user_id in veto.team2)
     await interaction.response.send_message(f"**Starting Veto With:** {display_list(maps)}" +
                                             f"\nTeams: {mentions_t1} vs. {mentions_t2}" +
                                             f"\n Team banning: {mentions_active}" +
@@ -113,8 +116,9 @@ async def start_veto(interaction: discord.Interaction, team1: str, team2: str, n
 @bot.tree.command(name="cancelveto", description="Cancels the active veto", guild=discord.Object(id=guild_id))
 @app_commands.checks.has_any_role("Admin", "Tournament Organizer")
 async def cancel_veto(interaction: discord.Interaction):
-    if bot.active_veto is not None:
-        bot.active_veto = None
+    veto = get_veto_for_channel(bot.active_vetoes, interaction.channel.id)
+    if veto is not None:
+        bot.active_vetoes.remove(veto)
         await interaction.response.send_message("Cancelled active veto")
     else:
         await interaction.response.send_message("No active veto.")
