@@ -1,13 +1,16 @@
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+
 import json
 import os
+
 from veto import Veto
-from utils import display_list
+from utils import display_list, parse_users
 
 load_dotenv()
-token = os.getenv("DISCORD_TOKEN")
+discord_token = os.getenv("DISCORD_TOKEN")
+startgg_token = os.getenv("STARTGG_TOKEN")
 
 guild_id = 1392628719935291442
 description = '''Bot for Esports NL'''
@@ -22,7 +25,6 @@ bot.active_veto = None
 async def on_ready():
     print(f'Logged on as {bot.user}!')
     # Register commands
-    guild_id = 1392628719935291442
     guild = discord.Object(id=guild_id)
     synced = await bot.tree.sync(guild=guild)
     print(f"Synced {len(synced)} command(s) to guild {guild_id}")
@@ -33,7 +35,7 @@ async def on_message(message):
     if message.content.startswith("-") and bot.active_veto is not None:
         try:
             map_to_ban = message.content[1:]
-            bot.active_veto.ban(map_to_ban)
+            bot.active_veto.ban(map_to_ban, int(message.author.id))
 
             if bot.active_veto.completed:
                 maps_text = display_list(bot.active_veto.maps_remaining)
@@ -41,10 +43,12 @@ async def on_message(message):
                 await message.channel.send("Banned map " + map_to_ban.capitalize() +
                                            "\nMap(s) for the match: " + maps_text)
             else:
-                await message.channel.send("Banned map " + map_to_ban.capitalize() +
-                                           "\nMaps remaining: " + display_list(bot.active_veto.maps_remaining))
-        except ValueError:
-            await message.channel.send("Map not in map list")
+                mentions = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.active_team)
+                await message.channel.send(f"Banned map {map_to_ban.capitalize()}"+
+                                           f"\nTeam banning: {mentions}"
+                                           f"\nMaps remaining: {display_list(bot.active_veto.maps_remaining)}")
+        except ValueError as e:
+            await message.channel.send(str(e))
 
 
 @bot.tree.command(name="mappool", description="Lists the current map pool", guild=discord.Object(id=guild_id))
@@ -54,14 +58,16 @@ async def map_pool(interaction: discord.Interaction):
     await interaction.response.send_message("**Current map pool:** " + display_list(data["maps"]))
 
 @bot.tree.command(name="startveto", description="Starts a veto for the specified number of maps (default 1)", guild=discord.Object(id=guild_id))
-async def start_veto(interaction: discord.Interaction, num_maps: int = 1):
+async def start_veto(interaction: discord.Interaction, team1: str, team2: str, num_maps: int = 1):
     with open("config.json", "r") as f:
         data = json.load(f)
     maps = data["maps"]
     if bot.active_veto is not None:
         await interaction.response.send_message("There is already an active veto")
-    bot.active_veto = Veto(maps, num_maps)
-    await interaction.response.send_message("**Starting Veto With:** " + display_list(maps) +
+    bot.active_veto = Veto(maps, parse_users(team1), parse_users(team2), num_maps)
+    mentions = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.active_team)
+    await interaction.response.send_message(f"**Starting Veto With:** {display_list(maps)}" +
+                                            f"\n Team banning: {mentions}" +
                                             "\n Type -<map> to ban a map.")
 
-bot.run(token)
+bot.run(discord_token)
