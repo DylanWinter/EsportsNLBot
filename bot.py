@@ -46,7 +46,7 @@ async def on_message(message):
                 else:
                     mentions = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.active_team)
                     await message.channel.send(f"Banned map {map_to_ban.capitalize()}"+
-                                               f"\nTeam banning: {mentions}"
+                                               f"\nTeam banning: {mentions}" +
                                                f"\nMaps remaining: {display_list(bot.active_veto.maps_remaining)}")
         except ValueError as e:
             await message.channel.send(str(e))
@@ -68,9 +68,12 @@ async def start_veto(interaction: discord.Interaction, team1: str, team2: str, n
     if bot.active_veto is not None:
         await interaction.response.send_message("There is already an active veto.")
     bot.active_veto = Veto(maps, parse_users(team1), parse_users(team2), num_maps)
-    mentions = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.active_team)
+    mentions_active = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.active_team)
+    mentions_t1 = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.team1)
+    mentions_t2 = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.team2)
     await interaction.response.send_message(f"**Starting Veto With:** {display_list(maps)}" +
-                                            f"\n Team banning: {mentions}" +
+                                            f"\nTeams: {mentions_t1} vs. {mentions_t2}" +
+                                            f"\n Team banning: {mentions_active}" +
                                             "\n Type -<map> to ban a map.")
 
 bot.run(discord_token)

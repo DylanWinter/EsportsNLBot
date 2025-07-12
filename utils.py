@@ -1,17 +1,16 @@
-""" Correctly formats a list of maps """
+import re
+
 def display_list(data: list[str]):
+    """ Correctly formats a list of maps """
     return ", ".join(item.capitalize() for item in data)
 
-""" Parses user IDs from a list of Discord Users """
 def parse_users(user_str: str) -> list[int]:
+    """Parses a string of Discord mentions and returns a list of user IDs as integers."""
     if not user_str:
         return []
-    # Split by comma, strip spaces and remove mention syntax
-    users = []
-    for mention in user_str.split(","):
-        mention = mention.strip()
-        # Discord mentions look like <@!id> or <@id>, so remove <>
-        if mention.startswith("<@") and mention.endswith(">"):
-            mention = mention.replace("<@!", "").replace("<@", "").replace(">", "")
-        users.append(int(mention))
-    return users
+
+    # Regex to match both <@123> and <@!123>
+    pattern = r"<@!?(?P<id>\d+)>"
+
+    # Find all matches and convert to integers
+    return [int(match.group("id")) for match in re.finditer(pattern, user_str)]
