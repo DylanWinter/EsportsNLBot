@@ -10,8 +10,8 @@ class Veto:
         self.team2 = [int(p) for p in team2]
         self.active_team = self.team1
 
-    """ Bans a map, updates the active team """
     def ban(self, map_to_ban: str, user_id: int):
+        """ Bans a map, updates the active team """
         if map_to_ban.lower() in self.maps_remaining:
             self.maps_remaining.remove(map_to_ban.lower())
             self.banned_maps.append(map_to_ban.lower())
@@ -29,4 +29,5 @@ class Veto:
             raise ValueError("Map not in maps list: " + map_to_ban)
 
     def can_user_ban(self, user_id: int):
+        """ Returns true if a user is in the active team"""
         return int(user_id) in self.active_team

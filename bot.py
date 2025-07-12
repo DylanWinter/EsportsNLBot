@@ -52,21 +52,46 @@ async def on_message(message):
             await message.channel.send(str(e))
 
 
-@bot.tree.command(name="mappool", description="Lists the current map pool", guild=discord.Object(id=guild_id))
-async def map_pool(interaction: discord.Interaction):
+@bot.tree.command(name="maplist", description="Lists the current map pool", guild=discord.Object(id=guild_id))
+async def list_map_pool(interaction: discord.Interaction):
     with open("config.json", "r") as f:
         data = json.load(f)
     await interaction.response.send_message("**Current map pool:** " + display_list(data["maps"]))
 
+@bot.tree.command(name="mapreplace", description="Replace a map in the pool", guild=discord.Object(id=guild_id))
+async def replace_map(interaction: discord.Interaction, map_to_replace:str, new_map:str):
+    with open("config.json", "r") as f:
+        data = json.load(f)
+
+    maps = data.get("maps", [])
+
+    # Case-insensitive check
+    try:
+        index = next(i for i, m in enumerate(maps) if m.lower() == map_to_replace.lower())
+    except StopIteration:
+        await interaction.response.send_message(f"Map `{map_to_replace}` not found in the current pool.", ephemeral=True)
+        return
+
+    old_map = maps[index]
+    maps[index] = new_map
+    data["maps"] = maps
+
+    with open("config.json", "w") as f:
+        json.dump(data, f, indent=4)
+
+    await interaction.response.send_message(
+        f"Replaced map `{old_map.capitalize()}` with `{new_map.capitalize()}`.\n**New map pool:** {display_list(maps)}"
+    )
+
 @bot.tree.command(name="startveto", description="Starts a veto for the specified number of maps (default 1)", guild=discord.Object(id=guild_id))
 async def start_veto(interaction: discord.Interaction, team1: str, team2: str, num_maps: int = 1):
     if num_maps != 1 and num_maps != 3 and num_maps != 5:
-        await interaction.response.send_message("Invalid veto. Supply 1, 3 or 5 maps.")
+        await interaction.response.send_message("Invalid veto. Supply 1, 3 or 5 maps.", ephemeral=True)
     with open("config.json", "r") as f:
         data = json.load(f)
     maps = data["maps"]
     if bot.active_veto is not None:
-        await interaction.response.send_message("There is already an active veto.")
+        await interaction.response.send_message("There is already an active veto.", ephemeral=True)
     bot.active_veto = Veto(maps, parse_users(team1), parse_users(team2), num_maps)
     mentions_active = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.active_team)
     mentions_t1 = " ".join(f"<@{user_id}>" for user_id in bot.active_veto.team1)
@@ -75,5 +100,13 @@ async def start_veto(interaction: discord.Interaction, team1: str, team2: str, n
                                             f"\nTeams: {mentions_t1} vs. {mentions_t2}" +
                                             f"\n Team banning: {mentions_active}" +
                                             "\n Type -<map> to ban a map.")
+
+@bot.tree.command(name="cancelveto", description="Cancels the active veto", guild=discord.Object(id=guild_id))
+async def cancel_veto(interaction: discord.Interaction):
+    if bot.active_veto is not None:
+        bot.active_veto = None
+        await interaction.response.send_message("Cancelled active veto")
+    else:
+        await interaction.response.send_message("No active veto.")
 
 bot.run(discord_token)
