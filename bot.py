@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import json
 import os
 
-from veto import Veto
+from veto import Veto, VetoAction
 from utils import display_list, parse_users, get_veto_for_channel
 
 load_dotenv()
@@ -22,6 +22,7 @@ bot = commands.Bot(command_prefix='?', description=description, intents=intents)
 # Bot state
 bot.active_vetoes = []
 
+
 @bot.event
 async def on_ready():
     print(f'Logged on as {bot.user}!')
@@ -30,28 +31,49 @@ async def on_ready():
     synced = await bot.tree.sync(guild=guild)
     print(f"Synced {len(synced)} command(s) to guild {guild_id}")
 
+
 @bot.event
 async def on_message(message):
-    # Handles map veto (messages starting with -)
+    # Handles map veto (messages starting with - or +)
     veto = get_veto_for_channel(bot.active_vetoes, message.channel.id)
-    if message.content.startswith("-") and veto is not None:
-        try:
-            map_to_ban = message.content[1:]
-            if veto.can_user_ban(int(message.author.id)):
-                veto.ban(map_to_ban, int(message.author.id))
+    if veto is not None:
+        action_made = False
+        map_choice = ""
+        veto_action = veto.get_veto_action()
+        if (message.content.startswith("-") and veto is not None
+                and veto.get_veto_action() == VetoAction.Ban):
+            try:
+                map_choice = message.content[1:]
+                if veto.can_user_ban(int(message.author.id)):
+                    veto.ban(map_choice, int(message.author.id))
+                    action_made = True
+            except ValueError as e:
+                await message.channel.send(str(e))
 
-                if veto.completed:
-                    maps_text = display_list(veto.maps_remaining)
-                    bot.active_vetoes.remove(veto)
-                    await message.channel.send("Banned map " + map_to_ban.capitalize() +
-                                               "\nMap(s) for the match: " + maps_text)
-                else:
-                    mentions = " ".join(f"<@{user_id}>" for user_id in veto.active_team)
-                    await message.channel.send(f"Banned map {map_to_ban.capitalize()}"+
-                                               f"\nTeam banning: {mentions}" +
-                                               f"\nMaps remaining: {display_list(veto.maps_remaining)}")
-        except ValueError as e:
-            await message.channel.send(str(e))
+        elif (message.content.startswith("+") and veto is not None
+                and veto.get_veto_action() == VetoAction.Pick):
+            try:
+                map_choice = message.content[1:]
+                if veto.can_user_ban(int(message.author.id)):
+                    veto.pick(map_choice, int(message.author.id))
+                    action_made = True
+            except ValueError as e:
+                await message.channel.send(str(e))
+
+        if veto.completed and action_made:
+            action_text = "Banned" if veto_action == VetoAction.Ban else "Picked"
+            maps_text = display_list(veto.picked_maps)
+            bot.active_vetoes.remove(veto)
+            await message.channel.send(f"{action_text} map " + map_choice.capitalize() +
+                                       "\nMap(s) for the match: " + maps_text)
+        elif action_made:
+            action_text = "Banned" if veto_action == VetoAction.Ban else "Picked"
+            next_action_text = "banning" if veto.get_veto_action() == VetoAction.Ban else "picking"
+            mentions = " ".join(f"<@{user_id}>" for user_id in veto.active_team)
+            await message.channel.send(f"{action_text} map {map_choice.capitalize()}" +
+                                       f"\nTeam {next_action_text}: {mentions}" +
+                                       f"\nMaps remaining: {display_list(veto.maps_remaining)}")
+
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
@@ -62,6 +84,7 @@ async def on_app_command_error(interaction: discord.Interaction, error):
             await interaction.response.send_message("You don’t have the required role to use this command.", ephemeral=True)
     else:
         print(f"Unhandled error: {error}")
+
 
 @bot.tree.command(name="maplist", description="Lists the current map pool", guild=discord.Object(id=guild_id))
 async def list_map_pool(interaction: discord.Interaction):
@@ -92,6 +115,7 @@ async def replace_map(interaction: discord.Interaction, map_to_replace:str, new_
         f"Replaced map `{old_map.capitalize()}` with `{new_map.capitalize()}`.\n**New map pool:** {display_list(maps)}"
     )
 
+
 @bot.tree.command(name="startveto", description="Starts a veto for the specified number of maps (default 1)", guild=discord.Object(id=guild_id))
 @app_commands.checks.has_any_role("Admin", "Tournament Organizer")
 async def start_veto(interaction: discord.Interaction, team1: str, team2: str, num_maps: int = 1):
@@ -111,7 +135,8 @@ async def start_veto(interaction: discord.Interaction, team1: str, team2: str, n
     await interaction.response.send_message(f"**Starting Veto With:** {display_list(maps)}" +
                                             f"\nTeams: {mentions_t1} vs. {mentions_t2}" +
                                             f"\n Team banning: {mentions_active}" +
-                                            "\n Type -<map> to ban a map.")
+                                            "\n Type -<map> to ban a map, and +<map> to pick a map.")
+
 
 @bot.tree.command(name="cancelveto", description="Cancels the active veto", guild=discord.Object(id=guild_id))
 @app_commands.checks.has_any_role("Admin", "Tournament Organizer")
